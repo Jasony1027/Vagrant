@@ -1,0 +1,69 @@
+---
+- hosts: tododb
+  become: true
+  tasks:
+    # Set up MongoDB and allow access thorough port 27017
+    - name: Provision the MongoDB repo file
+      copy:
+        src: mongodb-org-4.4.repo
+        dest: /etc/yum.repos.d/mongodb-org-4.4.repo
+
+    - name: Install MongoDB
+      package:
+        name: mongodb-org
+        state: present
+
+    - name: Provision /etc/mongod.conf
+      copy:
+        src: mongod.conf
+        dest: /etc/mongod.conf
+
+    - name: MongoDB enabled at boot
+      systemd:
+        name: mongod
+        enabled: yes
+        state: started
+
+    - name: Make sure the firewall allows Mongo traffix
+      firewalld:
+        port: 27017/tcp
+        permanent: true
+        state: enabled
+        immediate: yes
+
+    # Load pre existing database
+    - name: Install-tar
+      package:
+        name: tar
+        state: present
+
+    - name: Download Mongod export
+      get_url:
+        url: https://acit4640.y.vu/docs/module06/resources/mongodb_ACIT4640.tgz
+        dest: /home/admin/mongodb_ACIT4640.tgz
+        username: student
+        password: BCIT2020
+
+    - name: Unpack the downloaded export
+      unarchive:
+        src: /home/admin/mongodb_ACIT4640.tgz
+        dest: /home/admin
+        creates: /home/admin/ACIT4640
+        remote_src: yes
+
+    - name: Export database
+      shell: export LANG=C
+
+    - name: Provision initial data in the database 
+      shell: mongorestore -d ACIT4640 /home/admin/ACIT4640
+  
+    - name: Ensure MongoDB listens on all interfaces
+      replace:
+        path: /etc/mongod.conf
+        regexp: '127.0.0.1'
+        replace: '0.0.0.0'
+
+    - name: Restart MongoDB 
+      systemd:
+        name: mongod
+        state: restarted

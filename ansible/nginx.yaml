@@ -1,0 +1,26 @@
+---
+- hosts: nginx
+  become: true
+  tasks:
+    # Set up Nginx server
+    - name: Install Nginx
+      package:
+        name: nginx      
+        state: present
+
+    - name: Provision the nginx config file
+      copy:
+        src: nginx.conf
+        dest: /etc/nginx/nginx.conf 
+
+    - name: Enable and start nginx
+      systemd:
+        name: nginx 
+        enabled: yes
+        state: started
+
+    - name: Make sure that port 80 is open
+      firewalld:
+        port: 80/tcp
+        permanent: true
+        state: enabled

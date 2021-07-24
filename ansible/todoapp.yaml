@@ -1,0 +1,93 @@
+---
+- hosts: todoapp
+  become: true
+  vars:
+    todoapp_user: todoapp
+  tasks:
+    # Set up todoapp server environments/packages
+    - name: Download NodeJS installation repo
+      get_url:
+        url: https://rpm.nodesource.com/setup_14.x 
+        dest: /tmp/nodejs_setup
+      register: nodejs_repo_task
+
+    - name: Execute NodeJS installation script
+      when: nodejs_repo_task.changed
+      shell: bash /tmp/nodejs_setup
+
+    - name: Install required pakages 
+      package:
+        name: "{{ item }}"
+        state: present
+      with_items:
+        - git
+        - nodejs
+
+    - name: Make sure todoapp user exists
+      user: 
+        name: "{{todoapp_user}}"
+        state: present
+
+    - name: Change todoapp user home directory permissions
+      file:
+        path: /home/todoapp
+        mode: 0755
+
+    - name: Provision the unit file for todoapp
+      template:
+        src: todoapp.j2
+        dest: /etc/systemd/system/todoapp.service
+
+    - name: Open port on firewall
+      firewalld:
+        port: 8080/tcp
+        permanent: true
+        state: enabled
+
+    - name: Enable and start todoapp service
+      systemd:
+        name: todoapp 
+        enabled: yes
+        state: started
+
+     # Set up todoapp source code and start the service 
+    - name: Git clone todoapp repo
+      become_method: sudo
+      become_user: "{{ todoapp_user }}"
+      git:
+        repo: https://github.com/timoguic/ACIT4640-todo-app.git
+        dest: /home/{{ todoapp_user }}/app
+        force: yes
+
+    - name: Install node modules 
+      become_method: sudo
+      become_user: "{{ todoapp_user }}"
+      shell: npm install
+      args:
+        chdir: /home/{{ todoapp_user }}/app
+
+    - name: Modify database file to connect to tododb server
+      become_method: sudo
+      become_user: "{{ todoapp_user }}"
+      replace:
+        path: /home/todoapp/app/config/database.js
+        regexp: 'localhost'
+        replace: '192.168.150.30:27017'
+
+    - name: Specify the db to be connected 
+      become_method: sudo
+      become_user: "{{ todoapp_user }}"
+      replace:
+        path: /home/todoapp/app/config/database.js
+        regexp: 'CHANGEME'
+        replace: 'ACIT4640'
+
+    - name: Restart todoapp service
+      systemd:
+        name: todoapp 
+        state: restarted
+
+ 
+
+
+       

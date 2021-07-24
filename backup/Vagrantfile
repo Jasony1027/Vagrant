@@ -1,0 +1,98 @@
+Vagrant.configure("2") do |config|
+  config.vm.box = "4640BOX"
+  config.ssh.username = "admin"
+  config.ssh.private_key_path = "./files/acit_admin_id_rsa"
+  config.vm.synced_folder ".", "/vagrant", disabled: true    
+
+  config.vm.provider "virtualbox" do |vb|
+    vb.gui = true
+    # take snapshot
+    vb.linked_clone = true
+  end
+
+  config.vm.define "todoapp" do |todoapp|
+    todoapp.vm.provider "virtualbox" do |vb|
+      vb.name = "TODO_APP_4640"
+      vb.memory = 1024
+    end
+    todoapp.vm.hostname = "todoapp.bcit.local"
+    todoapp.vm.network "private_network", ip: "192.168.150.10"
+    todoapp.vm.network "forwarded_port", guest: 80, host: 8888
+    todoapp.vm.provision "file", source: "./files/nginx.conf", destination: "/tmp/"
+    todoapp.vm.provision "shell", inline: <<-SHELL
+      setenforce 0
+
+      dnf install -y nginx
+      mv /tmp/nginx.conf /etc/nginx/nginx.conf
+
+      firewall-cmd --zone=public --add-port=8888/tcp
+      firewall-cmd --runtime-to-permanent
+
+      systemctl daemon-reload
+      systemctl enable nginx --now
+    SHELL
+  end
+
+  config.vm.define "todohttp" do |todohttp|
+    todohttp.vm.provider "virtualbox" do |vb|
+      vb.name = "TODO_HTTP_4640"
+      vb.memory = 1024
+    end
+    todohttp.vm.hostname = "todoapp.bcit.local"
+    todohttp.vm.network "private_network", ip: "192.168.150.20"
+    todohttp.vm.provision "file", source: "./files/todoapp.service", destination: "/tmp/todoapp.service"
+    todohttp.vm.provision "shell", inline: <<-SHELL
+      PASSWORD="P@ssw0rd"
+      setenforce 0
+
+      useradd todoapp
+      echo $PASSWORD | passwd --stdin todoapp 
+      passwd -l todoapp
+
+      mv /tmp/todoapp.service /etc/systemd/system/todoapp.service
+
+      curl -sL https://rpm.nodesource.com/setup_14.x | sudo bash -
+
+      dnf install -y git nodejs
+
+      sudo -u todoapp bash /tmp/todoapp.sh
+
+      firewall-cmd --zone=public --add-port=8080/tcp
+      firewall-cmd --runtime-to-permanent
+
+      systemctl daemon-reload
+      systemctl enable todoapp --now
+
+      systemctl restart todoapp
+    SHELL
+  end
+
+  config.vm.define "tododb" do |tododb|
+    tododb.vm.provider "virtualbox" do |vb|
+      vb.name = "TODO_DB_4640"
+      vb.memory = 1024
+    end
+    tododb.vm.hostname = "todoapp.bcit.local"
+    tododb.vm.network "private_network", ip: "192.168.150.30"
+    tododb.vm.provision "file", source: "./files/mongodb-org-4.4.repo", destination: "/tmp/mongodb-org-4.4.repo"
+    tododb.vm.provision "file", source: "./files/ACIT4640", destination: "/tmp/ACIT4640"
+
+    tododb.vm.provision "shell", inline: <<-SHELL
+      setenforce 0
+      mv /tmp/mongodb-org-4.4.repo /etc/yum.repos.d/mongodb-org-4.4.repo
+
+      dnf install -y mongodb-org
+
+      firewall-cmd --zone=public --add-port=27017/tcp
+      firewall-cmd --runtime-to-permanent
+      
+      systemctl daemon-reload
+      systemctl enable mongod --now
+
+      sed -i 's#127.0.0.1#0.0.0.0#' /etc/mongod.conf
+
+      export LANG=C
+      mongorestore -d ACIT4640 /tmp/ACIT4640
+    SHELL
+  end
+end

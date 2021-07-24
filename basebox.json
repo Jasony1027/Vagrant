@@ -1,0 +1,47 @@
+{
+  "variables": {
+    "admin_user": "admin",
+    "files_dir": "./files"
+  },
+  "builders": [
+    {
+      "boot_command": [
+        "<up><wait><tab><wait> text ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ks.cfg<enter><wait>"
+      ],
+      "format": "ova",
+      "guest_additions_mode": "disable",
+      "memory": "2048",
+      "guest_os_type": "RedHat_64",
+      "output_directory": "./output",
+      "hard_drive_discard": true,
+      "hard_drive_interface": "sata",
+      "hard_drive_nonrotational": true,
+      "shutdown_command": "sudo poweroff",
+      "iso_url": "./isos/CentOS-8.2.2004-x86_64-minimal.iso",
+      "iso_checksum": "file:./isos/shasum.txt",
+      "http_directory": "./http",
+      "ssh_username": "{{ user `admin_user` }}",
+      "ssh_private_key_file": "{{ user `files_dir` }}/acit_admin_id_rsa",
+      "ssh_pty": "true",
+      "ssh_timeout": "20m",
+      "type": "virtualbox-iso",
+      "vboxmanage": [
+        [
+          "modifyvm",
+          "{{.Name}}",
+          "--nictype1",
+          "virtio"
+        ]
+      ],
+      "vm_name": "4640_BASE"
+    }
+  ],
+  "description": "Packer basebox for 4640",
+  "post-processors":[
+    {
+      "type":"vagrant",
+      "keep_input_artifact":true,
+      "output":"base_4640.box"
+    }
+  ]
+}
